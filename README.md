@@ -100,3 +100,29 @@ npm test
 ## Technical Decisions / Limitations / Scaling
 
 Please refer to the spec.md for these sections. I treated the spec.md as essentially a technical design doc. so all the additional details can be found in it.
+
+
+## API
+
+Base path `/v1`. Full schema: [docs/openapi.json](docs/openapi.json).
+
+| Method and path | Definition |
+|---|---|
+| `POST /v1/feeds` | Ingest a dealership's full-snapshot feed; returns `201` when applied, `200` when it is an identical replay. |
+| `GET /v1/dealerships` | List known dealerships with their latest `feedDate` and active vehicle count. |
+| `GET /v1/dealerships/{dealershipId}/vehicles` | List a dealership's active vehicles, ordered by VIN, filterable by `condition`, `lotStatus`, `make` and `maxPrice`. |
+| `GET /v1/dealerships/{dealershipId}/vehicles?status=removed` | List the dealership's removed vehicles, with the same filters available. |
+| `GET /v1/dealerships/{dealershipId}/vehicles/{vin}` | Get one vehicle by VIN, whether active or removed. |
+| `GET /healthz` | Report service health; returns `200` when the database is usable, `503` otherwise. |
+
+
+
+## 12. Deliverables checklist
+
+- [] Repository public, or shared with the `C-4Engineering` GitHub org
+- [ ] `Dockerfile` + prebuilt `linux/amd64` image (registry digest or archive with load instructions)
+- [ ] `README.md`: build/run/test, API, architecture and decisions (D-1…D-10), scale notes, assumptions, limitations
+- [ ] `scripts/replay-example.sh` (and `examples/*.json`) replaying March 15/16
+- [ ] Automated tests passing
+- [ ] `AI_DEVELOPMENT.md`
+- [ ] Email to the three addressees in the brief

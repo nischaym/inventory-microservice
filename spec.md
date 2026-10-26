@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Draft for review |
+| **Status** | Reviewed |
 | **Author** | Nischay |
 | **Date** | 2026-10-25 |
 | **Stack** | TypeScript, Node.js, Express 5, Zod, SQLite (`node:sqlite`), Pino |
@@ -664,21 +664,11 @@ If time runs out, cut in this order: unit-test breadth, then docs polish, then e
 
 ---
 
-## 12. Deliverables checklist
-
-- [ ] Repository public, or shared with the `C-4Engineering` GitHub org
-- [ ] `Dockerfile` + prebuilt `linux/amd64` image (registry digest or archive with load instructions)
-- [ ] `README.md`: build/run/test, API, architecture and decisions (D-1…D-10), scale notes, assumptions, limitations
-- [ ] `scripts/replay-example.sh` (and `examples/*.json`) replaying March 15/16
-- [ ] Automated tests passing
-- [ ] `AI_DEVELOPMENT.md`
-- [ ] Email to the three addressees in the brief
-
 ## 13. Resolved and remaining decisions
 
 Resolved with the author: storage (`node:sqlite` behind a one-file driver seam), Express + Zod, D-1 and D-2 (reject), empty feed accepted, serialisation via `BEGIN IMMEDIATE`, current-state data model, Pino logging. After the independent review: VIN is a 17-character length check only (D-9), and a future-date guard was added (D-10).
 
-Defaults chosen without asking; say the word to change any:
+Defaults chosen without asking by AI, reviewed by author;
 
 - A-2 ignore unknown keys (changed from strict after review)
 - A-12 VIN-ascending order (vs. e.g. `stockedOn` descending)
