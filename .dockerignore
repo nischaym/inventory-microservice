@@ -1,0 +1,19 @@
+# Only package manifests, tsconfig and src/ are needed to build the image.
+node_modules
+dist
+coverage
+test
+scripts
+examples
+.git
+.gitignore
+.claude
+*.md
+*.db
+*.db-wal
+*.db-shm
+*.tar
+*.tar.gz
+.DS_Store
+.env
+!artifacts/*.tar.gz

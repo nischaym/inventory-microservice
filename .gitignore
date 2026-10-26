@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+
+# SQLite database and WAL sidecars (local runs)
+*.db
+*.db-wal
+*.db-shm
+
+# Exported container image archives
+*.tar
+*.tar.gz
+!artifacts/*.tar.gz
+
+.DS_Store
+.env
+

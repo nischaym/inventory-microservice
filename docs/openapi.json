@@ -1,0 +1,363 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Inventory Service",
+    "version": "0.1.0",
+    "description": "Ingests full-snapshot dealership inventory feeds and serves active and removed vehicles. Every feed is a complete snapshot: vehicles missing from it become removed. See spec.md for the decisions referenced below (D-x, A-x)."
+  },
+  "servers": [{ "url": "http://localhost:8080", "description": "Local container" }],
+  "tags": [
+    { "name": "Feeds", "description": "Ingest dealership snapshots" },
+    { "name": "Inventory", "description": "Query dealerships and vehicles" },
+    { "name": "Operations", "description": "Health" }
+  ],
+  "paths": {
+    "/v1/feeds": {
+      "post": {
+        "tags": ["Feeds"],
+        "operationId": "ingestFeed",
+        "summary": "Ingest a feed (complete snapshot for one dealership and date)",
+        "description": "All-or-nothing: any invalid part rejects the whole feed and changes nothing. Re-sending an accepted feed (same dealership, date and content) is a replay and returns 200. The same date with different content is FEED_CONFLICT (D-2); an earlier date that was never accepted is STALE_FEED (D-1). feedDate may be at most one day after today (UTC) (D-10). An empty vehicles array removes every active vehicle (D-4).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Feed" },
+              "examples": {
+                "march15": {
+                  "summary": "Brief example: March 15 feed",
+                  "value": {
+                    "dealershipId": "LHS-1042",
+                    "feedDate": "2026-03-15",
+                    "vehicles": [
+                      { "vin": "2HGFE1F71NH304352", "stockNumber": "H2401", "condition": "used", "lotStatus": "on_lot", "year": 2022, "make": "Honda", "model": "Civic", "trim": "EX", "price": 18495, "mileage": 41850, "stockedOn": "2026-02-03" },
+                      { "vin": "5J6RS4H84TL012345", "stockNumber": "H2410", "condition": "new", "lotStatus": "on_lot", "year": 2026, "make": "Honda", "model": "CR-V", "trim": "EX-L", "price": 34250, "mileage": 8, "stockedOn": "2026-03-05" },
+                      { "vin": "1HGCY1F39TA098765", "stockNumber": "H2418", "condition": "new", "lotStatus": "in_transit", "year": 2026, "make": "Honda", "model": "Accord", "trim": "Sport", "price": 31480, "mileage": 4, "stockedOn": "2026-03-10" }
+                    ]
+                  }
+                },
+                "march16": {
+                  "summary": "Brief example: March 16 feed (Civic repriced with a lower-case VIN, Pilot added, Accord gone)",
+                  "value": {
+                    "dealershipId": "LHS-1042",
+                    "feedDate": "2026-03-16",
+                    "vehicles": [
+                      { "vin": "2hgfe1f71nh304352", "stockNumber": "H2401", "condition": "used", "lotStatus": "on_lot", "year": 2022, "make": "Honda", "model": "Civic", "trim": "EX", "price": 17995, "mileage": 41910, "stockedOn": "2026-02-03" },
+                      { "vin": "5J6RS4H84TL012345", "stockNumber": "H2410", "condition": "new", "lotStatus": "on_lot", "year": 2026, "make": "Honda", "model": "CR-V", "trim": "EX-L", "price": 34250, "mileage": 8, "stockedOn": "2026-03-05" },
+                      { "vin": "5FNYG1H78RB033333", "stockNumber": "H2422", "condition": "used", "lotStatus": "on_lot", "year": 2024, "make": "Honda", "model": "Pilot", "trim": "TrailSport", "price": 38900, "mileage": 22140, "stockedOn": "2026-03-16" }
+                    ]
+                  }
+                },
+                "emptyFeed": {
+                  "summary": "Empty snapshot: removes every active vehicle (D-4)",
+                  "value": { "dealershipId": "LHS-1042", "feedDate": "2026-03-17", "vehicles": [] }
+                },
+                "invalidCondition": {
+                  "summary": "Rejected with 422: condition \"cpo\" is not allowed",
+                  "value": {
+                    "dealershipId": "LHS-1042",
+                    "feedDate": "2026-03-17",
+                    "vehicles": [
+                      { "vin": "5J6RS4H84TL012345", "stockNumber": "H2410", "condition": "cpo", "lotStatus": "on_lot", "year": 2026, "make": "Honda", "model": "CR-V", "trim": "EX-L", "price": 34250, "mileage": 8, "stockedOn": "2026-03-05" }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Feed applied",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeedOutcome" },
+                "example": { "dealershipId": "LHS-1042", "feedDate": "2026-03-16", "status": "applied", "summary": { "added": 1, "updated": 1, "unchanged": 1, "removed": 1, "reactivated": 0, "active": 3 } }
+              }
+            }
+          },
+          "200": {
+            "description": "Replay of an already-accepted feed; nothing changed (D-3)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FeedOutcome" },
+                "example": { "dealershipId": "LHS-1042", "feedDate": "2026-03-16", "status": "replayed", "summary": { "added": 0, "updated": 0, "unchanged": 0, "removed": 0, "reactivated": 0, "active": 3 } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidJson" },
+          "409": {
+            "description": "STALE_FEED (D-1, includes latestFeedDate) or FEED_CONFLICT (D-2, includes feedDate)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "examples": {
+                  "stale": { "value": { "error": { "code": "STALE_FEED", "message": "Feed 2026-03-14 for LHS-1042 is older than the latest accepted feed 2026-03-16", "latestFeedDate": "2026-03-16" } } },
+                  "conflict": { "value": { "error": { "code": "FEED_CONFLICT", "message": "A different feed for LHS-1042 on 2026-03-16 was already accepted", "feedDate": "2026-03-16" } } }
+                }
+              }
+            }
+          },
+          "413": { "description": "PAYLOAD_TOO_LARGE: body over 10 MB", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "415": { "description": "UNSUPPORTED_MEDIA_TYPE: Content-Type is not application/json", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": {
+            "description": "VALIDATION_FAILED: every problem with its path (capped at 100, then truncated=true)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ValidationError" },
+                "example": {
+                  "error": {
+                    "code": "VALIDATION_FAILED",
+                    "message": "Feed rejected: 1 problem found. No inventory was changed.",
+                    "details": [{ "path": "vehicles[0].condition", "code": "invalid_value", "message": "Expected one of: new, used, certified (received \"cpo\")" }],
+                    "truncated": false
+                  }
+                }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/v1/dealerships": {
+      "get": {
+        "tags": ["Inventory"],
+        "operationId": "listDealerships",
+        "summary": "List known dealerships (those with at least one accepted feed)",
+        "responses": {
+          "200": {
+            "description": "Ordered by dealershipId",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DealershipList" },
+                "example": { "dealerships": [{ "dealershipId": "LHS-1042", "latestFeedDate": "2026-03-16", "activeVehicleCount": 3 }] }
+              }
+            }
+          },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/v1/dealerships/{dealershipId}/vehicles": {
+      "get": {
+        "tags": ["Inventory"],
+        "operationId": "listVehicles",
+        "summary": "List a dealership's vehicles (active by default, or removed)",
+        "description": "Ordered by VIN ascending (A-12). Unknown or invalid query parameters return 400.",
+        "parameters": [
+          { "$ref": "#/components/parameters/DealershipId" },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "removed"], "default": "active" } },
+          { "name": "condition", "in": "query", "schema": { "$ref": "#/components/schemas/Condition" } },
+          { "name": "lotStatus", "in": "query", "schema": { "$ref": "#/components/schemas/LotStatus" } },
+          { "name": "make", "in": "query", "description": "Case-insensitive exact match", "schema": { "type": "string", "example": "honda" } },
+          { "name": "maxPrice", "in": "query", "description": "Inclusive, whole dollars", "schema": { "type": "integer", "minimum": 1, "example": 35000 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching vehicles",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VehicleList" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/v1/dealerships/{dealershipId}/vehicles/{vin}": {
+      "get": {
+        "tags": ["Inventory"],
+        "operationId": "getVehicle",
+        "summary": "Get one vehicle by VIN, active or removed",
+        "description": "The VIN is matched ignoring surrounding whitespace and letter case (FR-16).",
+        "parameters": [
+          { "$ref": "#/components/parameters/DealershipId" },
+          { "name": "vin", "in": "path", "required": true, "description": "17 characters after trimming", "schema": { "type": "string", "example": "1HGCY1F39TA098765" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "The vehicle",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VehicleResponse" },
+                "example": { "vin": "1HGCY1F39TA098765", "stockNumber": "H2418", "condition": "new", "lotStatus": "in_transit", "year": 2026, "make": "Honda", "model": "Accord", "trim": "Sport", "price": 31480, "mileage": 4, "stockedOn": "2026-03-10", "status": "removed", "removedOn": "2026-03-16", "daysInInventory": 6 }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": ["Operations"],
+        "operationId": "health",
+        "summary": "Liveness/readiness: checks the database with SELECT 1",
+        "responses": {
+          "200": { "description": "Healthy", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" }, "example": { "status": "ok" } } } },
+          "503": { "description": "Database unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Health" }, "example": { "status": "unavailable" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "DealershipId": {
+        "name": "dealershipId",
+        "in": "path",
+        "required": true,
+        "description": "Case-sensitive, URL-encoded (A-1)",
+        "schema": { "type": "string", "example": "LHS-1042" }
+      }
+    },
+    "responses": {
+      "InvalidJson": { "description": "INVALID_JSON: body is not parseable JSON", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "InvalidRequest": { "description": "INVALID_REQUEST: invalid path or query parameter", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ValidationError" } } } },
+      "NotFound": { "description": "NOT_FOUND: unknown dealership or VIN", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Internal": { "description": "INTERNAL: unexpected failure; details are in the logs under the x-request-id", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Condition": { "type": "string", "enum": ["new", "used", "certified"] },
+      "LotStatus": { "type": "string", "enum": ["on_lot", "in_transit"] },
+      "CalendarDate": { "type": "string", "format": "date", "example": "2026-03-16" },
+      "Feed": {
+        "type": "object",
+        "required": ["dealershipId", "feedDate", "vehicles"],
+        "properties": {
+          "dealershipId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "feedDate": { "$ref": "#/components/schemas/CalendarDate" },
+          "vehicles": { "type": "array", "description": "Each VIN at most once (after case/whitespace normalization)", "items": { "$ref": "#/components/schemas/FeedVehicle" } }
+        }
+      },
+      "FeedVehicle": {
+        "type": "object",
+        "required": ["vin", "stockNumber", "condition", "lotStatus", "year", "make", "model", "price", "mileage", "stockedOn"],
+        "properties": {
+          "vin": { "type": "string", "description": "17 characters after trimming; case-insensitive" },
+          "stockNumber": { "type": "string", "minLength": 1, "maxLength": 50 },
+          "condition": { "$ref": "#/components/schemas/Condition" },
+          "lotStatus": { "$ref": "#/components/schemas/LotStatus" },
+          "year": { "type": "integer", "minimum": 1000, "maximum": 9999 },
+          "make": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "model": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "trim": { "type": "string", "nullable": true, "minLength": 1, "maxLength": 100, "description": "Optional; omitted and null are equivalent" },
+          "price": { "type": "integer", "minimum": 1, "description": "Whole dollars" },
+          "mileage": { "type": "integer", "minimum": 0 },
+          "stockedOn": { "$ref": "#/components/schemas/CalendarDate" }
+        }
+      },
+      "FeedSummary": {
+        "type": "object",
+        "required": ["added", "updated", "unchanged", "removed", "reactivated", "active"],
+        "properties": {
+          "added": { "type": "integer" },
+          "updated": { "type": "integer" },
+          "unchanged": { "type": "integer" },
+          "removed": { "type": "integer" },
+          "reactivated": { "type": "integer" },
+          "active": { "type": "integer", "description": "Active vehicles after this feed" }
+        }
+      },
+      "FeedOutcome": {
+        "type": "object",
+        "required": ["dealershipId", "feedDate", "status", "summary"],
+        "properties": {
+          "dealershipId": { "type": "string" },
+          "feedDate": { "$ref": "#/components/schemas/CalendarDate" },
+          "status": { "type": "string", "enum": ["applied", "replayed"] },
+          "summary": { "$ref": "#/components/schemas/FeedSummary" }
+        }
+      },
+      "VehicleResponse": {
+        "type": "object",
+        "required": ["vin", "stockNumber", "condition", "lotStatus", "year", "make", "model", "trim", "price", "mileage", "stockedOn", "status", "removedOn", "daysInInventory"],
+        "properties": {
+          "vin": { "type": "string", "description": "Upper-case" },
+          "stockNumber": { "type": "string" },
+          "condition": { "$ref": "#/components/schemas/Condition" },
+          "lotStatus": { "$ref": "#/components/schemas/LotStatus" },
+          "year": { "type": "integer" },
+          "make": { "type": "string" },
+          "model": { "type": "string" },
+          "trim": { "type": "string", "nullable": true },
+          "price": { "type": "integer" },
+          "mileage": { "type": "integer" },
+          "stockedOn": { "$ref": "#/components/schemas/CalendarDate" },
+          "status": { "type": "string", "enum": ["active", "removed"] },
+          "removedOn": { "type": "string", "format": "date", "nullable": true, "description": "feedDate of the first feed the vehicle was absent from; null when active" },
+          "daysInInventory": { "type": "integer", "minimum": 0, "description": "Days from stockedOn to today (UTC) if active, or to removedOn if removed (frozen)" }
+        }
+      },
+      "VehicleList": {
+        "type": "object",
+        "required": ["vehicles", "count"],
+        "properties": {
+          "vehicles": { "type": "array", "items": { "$ref": "#/components/schemas/VehicleResponse" } },
+          "count": { "type": "integer" }
+        }
+      },
+      "Dealership": {
+        "type": "object",
+        "required": ["dealershipId", "latestFeedDate", "activeVehicleCount"],
+        "properties": {
+          "dealershipId": { "type": "string" },
+          "latestFeedDate": { "$ref": "#/components/schemas/CalendarDate" },
+          "activeVehicleCount": { "type": "integer" }
+        }
+      },
+      "DealershipList": {
+        "type": "object",
+        "required": ["dealerships"],
+        "properties": { "dealerships": { "type": "array", "items": { "$ref": "#/components/schemas/Dealership" } } }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string", "enum": ["INVALID_JSON", "INVALID_REQUEST", "UNSUPPORTED_MEDIA_TYPE", "NOT_FOUND", "STALE_FEED", "FEED_CONFLICT", "PAYLOAD_TOO_LARGE", "VALIDATION_FAILED", "INTERNAL"] },
+              "message": { "type": "string" },
+              "latestFeedDate": { "type": "string", "format": "date", "description": "STALE_FEED only" },
+              "feedDate": { "type": "string", "format": "date", "description": "FEED_CONFLICT only" }
+            }
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": ["path", "code", "message"],
+        "properties": {
+          "path": { "type": "string", "example": "vehicles[1].condition", "description": "Empty string for the body itself" },
+          "code": { "type": "string", "example": "invalid_value" },
+          "message": { "type": "string" }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "details", "truncated"],
+            "properties": {
+              "code": { "type": "string", "enum": ["VALIDATION_FAILED", "INVALID_REQUEST"] },
+              "message": { "type": "string" },
+              "details": { "type": "array", "items": { "$ref": "#/components/schemas/Problem" } },
+              "truncated": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": ["status"],
+        "properties": { "status": { "type": "string", "enum": ["ok", "unavailable"] } }
+      }
+    }
+  }
+}

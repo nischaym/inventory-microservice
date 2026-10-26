@@ -1,0 +1,45 @@
+{
+  "dealershipId": "LHS-1042",
+  "feedDate": "2026-03-16",
+  "vehicles": [
+    {
+      "vin": "2hgfe1f71nh304352",
+      "stockNumber": "H2401",
+      "condition": "used",
+      "lotStatus": "on_lot",
+      "year": 2022,
+      "make": "Honda",
+      "model": "Civic",
+      "trim": "EX",
+      "price": 17995,
+      "mileage": 41910,
+      "stockedOn": "2026-02-03"
+    },
+    {
+      "vin": "5J6RS4H84TL012345",
+      "stockNumber": "H2410",
+      "condition": "new",
+      "lotStatus": "on_lot",
+      "year": 2026,
+      "make": "Honda",
+      "model": "CR-V",
+      "trim": "EX-L",
+      "price": 34250,
+      "mileage": 8,
+      "stockedOn": "2026-03-05"
+    },
+    {
+      "vin": "5FNYG1H78RB033333",
+      "stockNumber": "H2422",
+      "condition": "used",
+      "lotStatus": "on_lot",
+      "year": 2024,
+      "make": "Honda",
+      "model": "Pilot",
+      "trim": "TrailSport",
+      "price": 38900,
+      "mileage": 22140,
+      "stockedOn": "2026-03-16"
+    }
+  ]
+}
