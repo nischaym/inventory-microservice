@@ -15,8 +15,7 @@
 
 - After each milestone I verified it myself: ran npm test for milestones with no API surface, and exercised the API with Bruno using docs/openapi.json.
 - Review code manually, focused on validation, error handling and the DB driver boundary.
-- Use code review skill to check what needs to be fixed automatically and notify me when something needs my judgement/input
-- ran /code-review skill after each milestone; it auto-fixed minor issues and flagged judgement calls to me. Example: ENUMS were not created, so had to prompt the AI to update the string literals with the ENUMs and update the standards.md rule
+- ran /code-review skill after each milestone; one of the trend identified was ENUMS were not created, so had to prompt the AI to update the string literals with the ENUMs and update the standards.md rule
 
 
 ## Example of corrected AI output
